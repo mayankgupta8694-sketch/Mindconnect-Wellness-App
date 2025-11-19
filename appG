@@ -1,0 +1,694 @@
+import React, { useState, useEffect } from 'react';
+import { Home, History, BookOpen, ChevronLeft, Menu, X, User, Settings, LogOut } from 'lucide-react';
+
+// --- Configuration and Data ---
+const API_URL = `https://generativelace.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent`;
+const APP_NAME = "MindConnect";
+
+// --- NEW --- Daily Mood Quiz Questions
+const MOOD_QUIZ_QUESTIONS = [
+  { 
+    q: "How are you feeling right now, overall?", 
+    options: [
+      { text: "Happy / Positive", score: 5 }, 
+      { text: "Content / Okay", score: 3 }, 
+      { text: "Sad / Down", score: 1 },
+      { text: "Anxious / Stressed", score: 1 }
+    ] 
+  },
+  { 
+    q: "How well did you sleep last night?", 
+    options: [
+      { text: "Very well", score: 5 }, 
+      { text: "Okay / A bit restless", score: 3 }, 
+      { text: "Poorly", score: 1 }
+    ] 
+  },
+  { 
+    q: "Are you feeling motivated for your day?", 
+    options: [
+      { text: "Yes, very motivated", score: 5 }, 
+      { text: "A little", score: 3 }, 
+      { text: "Not at all", score: 1 }
+    ] 
+  }
+];
+
+const WELLNESS_QUIZ_QUESTIONS = {
+    'teen': [
+        { q: "How often do you feel overwhelmed by schoolwork or social pressure?", options: [{ text: "Rarely/Never", score: 1 }, { text: "Sometimes", score: 3 }, { text: "Often/Always", score: 5 }] },
+        { q: "How would you describe your sleep patterns in the last week?", options: [{ text: "Consistent and restful", score: 1 }, { text: "A bit irregular", score: 3 }, { text: "Very poor, trouble falling or staying asleep", score: 5 }] },
+        { q: "Do you feel comfortable talking to an adult about your problems?", options: [{ text: "Yes, always", score: 1 }, { text: "Sometimes, depending on the topic", score: 3 }, { text: "No, I keep things to myself", score: 5 }] },
+        { q: "How often do you compare yourself negatively to others on social media?", options: [{ text: "Rarely/Never", score: 1 }, { text: "Sometimes", score: 3 }, { text: "Often/Constantly", score: 5 }] },
+        { q: "How would you rate your general mood over the past two weeks?", options: [{ text: "Mostly positive and energized", score: 1 }, { text: "Up and down, but manageable", score: 3 }, { text: "Often down, lacking motivation", score: 5 }] },
+        { q: "When faced with a major setback, how easily do you bounce back?", options: [{ text: "Very easily, I see it as a lesson", score: 1 }, { text: "It takes me a few days", score: 3 }, { text: "I struggle to recover and feel stuck", score: 5 }] },
+        { q: "How satisfied are you with the friendships and social connections in your life?", options: [{ text: "Very satisfied, strong connections", score: 1 }, { text: "Okay, but sometimes feel misunderstood", score: 3 }, { text: "Dissatisfied, feel isolated/lonely", score: 5 }] },
+        { q: "How often do you feel excessively worried about the future (e.g., college, career)?", options: [{ text: "Rarely", score: 1 }, { text: "Occasionally, when I think about it", score: 3 }, { text: "Constantly, it interferes with my day", score: 5 }] },
+        { q: "How frequently do you use constructive coping mechanisms (e.g., exercise, hobbies, talking to someone) when stressed?", options: [{ text: "Always/Most of the time", score: 1 }, { text: "Sometimes, I rely on distractions too", score: 3 }, { text: "Rarely, I usually just avoid the issue", score: 5 }] },
+        { q: "How often do you feel like you are genuinely understood by your peers or family?", options: [{ text: "Most of the time", score: 1 }, { text: "Only sometimes", score: 3 }, { text: "Rarely or never", score: 5 }] },
+    ],
+    'adult': [
+        { q: "How balanced do you feel between your work/career and personal life?", options: [{ text: "Very balanced, good separation", score: 1 }, { text: "A little stressed, but manageable", score: 3 }, { text: "Overwhelmed, no time for myself", score: 5 }] },
+        { q: "In the past month, how often have you felt irritable or easily annoyed?", options: [{ text: "Very rarely", score: 1 }, { text: "A few times a week", score: 3 }, { text: "Most days", score: 5 }] },
+        { q: "How frequently do you engage in activities you genuinely enjoy (hobbies, relaxation)?", options: [{ text: "Daily or almost daily", score: 1 }, { text: "Once or twice a week", score: 3 }, { text: "Rarely or not at all", score: 5 }] },
+        { q: "How confident do you feel about your current financial stability?", options: [{ text: "Very confident, secure", score: 1 }, { text: "A little worried, but managing", score: 3 }, { text: "Highly anxious, feel overwhelmed by debt/lack of savings", score: 5 }] },
+        { q: "How often do you wake up feeling refreshed and well-rested?", options: [{ text: "Most mornings", score: 1 }, { text: "Sometimes", score: 3 }, { text: "Rarely or never", score: 5 }] },
+        { q: "When facing a conflict in a close relationship, how do you typically respond?", options: [{ text: "Calmly and seek mutual resolution", score: 1 }, { text: "Become defensive or withdraw slightly", score: 3 }, { text: "Become highly emotional or avoid the person entirely", score: 5 }] },
+        { q: "How frequently do you use alcohol, smoking, or overeating to cope with stress?", options: [{ text: "Never or very rarely", score: 1 }, { text: "Occasionally", score: 3 }, { text: "Frequently, relying on them for comfort", score: 5 }] },
+        { q: "How would you describe your overall concentration and focus at work/home in the last month?", options: [{ text: "Sharp and reliable", score: 1 }, { text: "Sometimes scattered", score: 3 }, { text: "Poor, I struggle to complete tasks", score: 5 }] },
+        { q: "How often do you feel a sense of purpose or meaning in your daily life?", options: [{ text: "Most of the time", score: 1 }, { text: "Sometimes I question my direction", score: 3 }, { text: "Rarely, I feel directionless", score: 5 }] },
+        { q: "How frequently do minor problems seem to escalate and feel overwhelming?", options: [{ text: "Rarely, I keep perspective", score: 1 }, { text: "Sometimes, depending on my mood", score: 3 }, { text: "Often, small things trigger strong stress", score: 5 }] },
+    ],
+    'elder': [
+        { q: "How satisfied are you with the amount of social interaction you have?", options: [{ text: "Very satisfied, feel connected", score: 1 }, { text: "Could be better, occasionally lonely", score: 3 }, { text: "Very lonely, often isolated", score: 5 }] },
+        { q: "Do you have any persistent physical discomfort that affects your mood?", options: [{ text: "No significant discomfort", score: 1 }, { text: "Minor, manageable aches", score: 3 }, { text: "Yes, it significantly drains my energy and mood", score: 5 }] },
+        { q: "How optimistic do you feel about the future and upcoming events?", options: [{ text: "Very optimistic and hopeful", score: 1 }, { text: "Neutral or cautiously optimistic", score: 3 }, { text: "Often worried or pessimistic", score: 5 }] },
+        { q: "How often do you feel connected to family members or close friends?", options: [{ text: "Daily or almost daily", score: 1 }, { text: "A few times a month", score: 3 }, { text: "Rarely, I feel mostly disconnected", score: 5 }] },
+        { q: "How would you rate your ability to adapt to changes in your routine or living situation?", options: [{ text: "Very flexible and adaptable", score: 1 }, { text: "It takes me time, but I manage", score: 3 }, { text: "I find change very difficult and unsettling", score: 5 }] },
+        { q: "How often in the last month have you felt a lack of energy or fatigue?", options: [{ text: "Rarely", score: 1 }, { text: "Often in the afternoon", score: 3 }, { text: "Most of the time, regardless of sleep", score: 5 }] },
+        { q: "Do you engage in any mentally stimulating activities (e.g., reading, puzzles, learning)?", options: [{ text: "Yes, several times a week", score: 1 }, { text: "Occasionally", score: 3 }, { text: "Rarely or never", score: 5 }] },
+        { q: "How comfortable are you accepting help or support from others when needed?", options: [{ text: "Very comfortable", score: 1 }, { text: "I prefer to handle things myself but will accept", score: 3 }, { text: "Very uncomfortable or refuse help", score: 5 }] },
+        { q: "How often do you reflect positively on your life's accomplishments and memories?", options: [{ text: "Frequently, with gratitude", score: 1 }, { text: "Sometimes, but often focus on regrets", score: 3 }, { text: "Rarely, I feel regretful or sad about the past", score: 5 }] },
+        { q: "How secure do you feel about your independence and ability to care for yourself?", options: [{ text: "Very secure and capable", score: 1 }, { text: "Slightly worried about the future", score: 3 }, { text: "Highly dependent or anxious about losing independence", score: 5 }] },
+    ],
+};
+
+// --- (Mock) Firebase Variables ---
+let MOCK_DB = {}; 
+let MOCK_AUTH = { currentUser: null, uid: null };
+const MOCK_APP_ID = 'default-app-id';
+
+// --- Helper Functions (Mocking) ---
+const fetchWithBackoff = async (url, options) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        json: () =>
+          Promise.resolve({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        group: `The Resilient Squad`,
+                        movies: ['Inside Out', 'Amelie', 'Good Will Hunting'],
+                        songs: ['Here Comes The Sun - The Beatles', 'Weightless - Marconi Union', 'Three Little Birds - Bob Marley'],
+                        doctor: {
+                          name: 'Dr. Evelyn Reed',
+                          specialization: 'Clinical Psychologist',
+                          contact: 'www.wellnesspath.com',
+                        },
+                      }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+      });
+    }, 2000); 
+  });
+};
+
+// --- (Mock) Firebase Functions ---
+const saveAssessmentData = async (data) => {
+  if (!MOCK_AUTH.uid) return;
+  const path = `/artifacts/${MOCK_APP_ID}/users/${MOCK_AUTH.uid}/wellness_assessments`;
+  if (!MOCK_DB[path]) MOCK_DB[path] = [];
+  const docId = `doc_${Date.now()}`;
+  MOCK_DB[path].push({ id: docId, ...data, timestamp: new Date().toISOString() });
+};
+
+const saveMoodData = async (data) => {
+  if (!MOCK_AUTH.uid) return;
+  const path = `/artifacts/${MOCK_APP_ID}/users/${MOCK_AUTH.uid}/mood_history`;
+  if (!MOCK_DB[path]) MOCK_DB[path] = [];
+  const docId = `doc_mood_${Date.now()}`;
+  const moodEntry = { ...data, id: docId, timestamp: new Date().toISOString() };
+  MOCK_DB[path].push(moodEntry);
+  return moodEntry;
+};
+
+const fetchMoodHistory = async () => {
+  if (!MOCK_AUTH.uid) return [];
+  const path = `/artifacts/${MOCK_APP_ID}/users/${MOCK_AUTH.uid}/mood_history`;
+  const history = (MOCK_DB[path] || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  await new Promise(res => setTimeout(res, 500));
+  return history;
+};
+
+// --- App State Management ---
+const App = () => {
+  const [view, setView] = useState('home'); // Main views: 'home', 'moodHistory', 'resources'
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Wellness Assessment State
+  const [ageGroup, setAgeGroup] = useState(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [wellnessScore, setWellnessScore] = useState(0);
+  const [wellnessQuizData, setWellnessQuizData] = useState([]);
+  const [recommendationResult, setRecommendationResult] = useState(null);
+  
+  // Daily Mood State
+  const [currentMoodQuestionIndex, setCurrentMoodQuestionIndex] = useState(0);
+  const [moodScore, setMoodScore] = useState(0);
+  const [moodResult, setMoodResult] = useState(null);
+  const [moodHistory, setMoodHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // General State
+  const [loading, setLoading] = useState(false);
+  const [modal, setModal] = useState({ visible: false, title: '', message: '' });
+  const [selectedQuizAnswer, setSelectedQuizAnswer] = useState(null);
+
+  // --- MOCK Firebase Auth ---
+  useEffect(() => {
+    const mockSignIn = () => {
+      MOCK_AUTH.currentUser = { uid: 'mock_user_123' };
+      MOCK_AUTH.uid = 'mock_user_123';
+      console.log('Mock Firebase: User signed in anonymously.');
+    };
+    mockSignIn();
+  }, []);
+
+  // --- Navigation ---
+  const navigateToTab = (tabName) => {
+    if (tabName === 'moodHistory') {
+        viewMoodHistory(); // Trigger data fetch
+    } else {
+        setView(tabName);
+    }
+  };
+
+  const goToHome = () => {
+    setAgeGroup(null);
+    setCurrentQuestionIndex(0);
+    setWellnessScore(0);
+    setRecommendationResult(null);
+    setCurrentMoodQuestionIndex(0);
+    setMoodScore(0);
+    setMoodResult(null);
+    setSelectedQuizAnswer(null);
+    setLoading(false);
+    setView('home');
+    setIsMenuOpen(false); // Ensure menu closes
+  };
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
+  const handleMenuAction = (action) => {
+    setIsMenuOpen(false);
+    if (action === 'reset') {
+        goToHome();
+        setModal({ visible: true, title: 'App Reset', message: 'The app state has been reset.' });
+    } else {
+        setModal({ visible: true, title: 'Coming Soon', message: 'This feature is under development.' });
+    }
+  };
+
+  // --- Wellness Assessment Logic ---
+  const startFullAssessment = () => {
+    setView('ageSelectGroup');
+  };
+
+  const handleStartWellnessQuiz = (selectedAgeGroup) => {
+    if (selectedAgeGroup) {
+      setAgeGroup(selectedAgeGroup);
+      setWellnessQuizData(WELLNESS_QUIZ_QUESTIONS[selectedAgeGroup]);
+      setCurrentQuestionIndex(0);
+      setWellnessScore(0);
+      setView('quiz');
+    } else {
+      setModal({ visible: true, title: 'Selection Required', message: 'Please select an age group.' });
+    }
+  };
+
+  const handleSubmitWellnessAnswer = (answerScore) => {
+    if (answerScore === null) {
+        setModal({ visible: true, title: 'Selection Required', message: 'Please select an answer.' });
+        return;
+    }
+    const newScore = wellnessScore + answerScore;
+    setWellnessScore(newScore);
+    setSelectedQuizAnswer(null);
+
+    const nextIndex = currentQuestionIndex + 1;
+    if (nextIndex >= wellnessQuizData.length) {
+      setView('results');
+      setLoading(true);
+      handleFetchRecommendations(ageGroup, newScore, wellnessQuizData.length * 5);
+    } else {
+      setCurrentQuestionIndex(nextIndex);
+    }
+  };
+
+  const handleFetchRecommendations = async (age, score, maxScore) => {
+    const stressLevel = score / maxScore > 0.6 ? 'high stress' : score / maxScore > 0.3 ? 'moderate stress' : 'low stress';
+    const userQuery = `User is a ${age} with a ${stressLevel} score (${score}/${maxScore})...`;
+    const systemPrompt = `You are a professional Mental Wellness Assistant...`;
+
+    const payload = {
+        contents: [{ parts: [{ text: userQuery }] }],
+        tools: [{ "google_search": {} }],
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: { responseMimeType: "application/json" }
+    };
+
+    try {
+      const response = await fetchWithBackoff(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      const parsedResult = JSON.parse(result.candidates?.[0]?.content?.parts?.[0]?.text);
+      setRecommendationResult(parsedResult);
+      saveAssessmentData({ ...parsedResult, ageGroup: age, quizScore: score, quizMaxScore: maxScore });
+    } catch (error) {
+      setModal({ visible: true, title: 'API Error', message: 'Could not get recommendations.' });
+      setRecommendationResult({
+        group: `The ${age} Resilient Squad`,
+        movies: ['Placeholder Movie 1', 'Placeholder Movie 2'],
+        songs: ['Placeholder Song 1', 'Placeholder Song 2'],
+        doctor: { name: 'Dr. Wellness Assistant', specialization: 'General Counseling', contact: '1-800-HELPLINE' },
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleShareResults = async () => {
+    if (!recommendationResult) return;
+    const shareText = `I just took the MindConnect assessment!`;
+    try {
+        await navigator.clipboard.writeText(shareText);
+        setModal({ visible: true, title: 'Success', message: 'Copied to clipboard!' });
+    } catch (err) {
+        setModal({ visible: true, title: 'Error', message: 'Could not share results.' });
+    }
+  };
+  
+  // --- Daily Mood Logic ---
+  const startMoodCheckin = () => {
+    setCurrentMoodQuestionIndex(0);
+    setMoodScore(0);
+    setMoodResult(null);
+    setSelectedQuizAnswer(null);
+    setView('moodCheckin');
+  };
+
+  const getMoodFromScore = (score) => {
+    const maxScore = 15;
+    if (score > maxScore * 0.7) return "Positive";
+    if (score > maxScore * 0.4) return "Neutral";
+    return "Struggling";
+  };
+  
+  const getMoodColor = (mood) => {
+    if (mood === "Positive") return 'text-green-600';
+    if (mood === "Neutral") return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const handleSubmitMoodAnswer = (answerScore) => {
+    if (answerScore === null) {
+        setModal({ visible: true, title: 'Selection Required', message: 'Please select an answer.' });
+        return;
+    }
+    const newScore = moodScore + answerScore;
+    setMoodScore(newScore);
+    setSelectedQuizAnswer(null);
+
+    const nextIndex = currentMoodQuestionIndex + 1;
+    if (nextIndex >= MOOD_QUIZ_QUESTIONS.length) {
+      const moodString = getMoodFromScore(newScore);
+      setMoodResult(moodString);
+      setView('moodResult');
+      saveMoodData({ mood: moodString, score: newScore, maxScore: 15 });
+    } else {
+      setCurrentMoodQuestionIndex(nextIndex);
+    }
+  };
+
+  const viewMoodHistory = async () => {
+    setView('moodHistory');
+    setLoadingHistory(true);
+    setMoodHistory([]);
+    try {
+      const historyData = await fetchMoodHistory();
+      setMoodHistory(historyData);
+    } catch (error) {
+      setModal({ visible: true, title: 'Error', message: 'Could not fetch mood history.' });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleOpenLink = (url) => {
+    let fullUrl = url;
+    if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) fullUrl = 'https://' + fullUrl;
+    try { window.open(fullUrl, '_blank', 'noopener,noreferrer'); } catch (err) {}
+  };
+
+  // --- Render Content Switcher ---
+  const renderContent = () => {
+    switch (view) {
+      case 'home':
+        return <HomeScreen onStartAssessment={startFullAssessment} onStartMoodCheckin={startMoodCheckin} />;
+      case 'resources':
+        return <ResourcesScreen />;
+      case 'moodHistory':
+        return <MoodHistoryScreen history={moodHistory} loading={loadingHistory} getMoodColor={getMoodColor} />;
+      
+      // Full Screen Flows (Tab bar hidden)
+      case 'ageSelectGroup':
+        return <AgeSelectScreen onStartQuiz={handleStartWellnessQuiz} onBack={goToHome} />;
+      case 'quiz':
+        return <QuizScreen question={wellnessQuizData[currentQuestionIndex]} qIndex={currentQuestionIndex} totalQ={wellnessQuizData.length} onSubmit={handleSubmitWellnessAnswer} selectedAnswer={selectedQuizAnswer} setSelectedAnswer={setSelectedQuizAnswer} title="Mental Wellness Check" />;
+      case 'results':
+        if (loading) return <LoadingScreen text="Analyzing Mindset..." />;
+        return <ResultsScreen result={recommendationResult} score={wellnessScore} maxScore={wellnessQuizData.length * 5} ageGroup={ageGroup} onShare={handleShareResults} onRestart={goToHome} onOpenLink={handleOpenLink} />;
+      case 'moodCheckin':
+        return <QuizScreen question={MOOD_QUIZ_QUESTIONS[currentMoodQuestionIndex]} qIndex={currentMoodQuestionIndex} totalQ={MOOD_QUIZ_QUESTIONS.length} onSubmit={handleSubmitMoodAnswer} selectedAnswer={selectedQuizAnswer} setSelectedAnswer={setSelectedQuizAnswer} title="Daily Mood Check-in" />;
+      case 'moodResult':
+        return <MoodResultScreen mood={moodResult} color={getMoodColor(moodResult)} onContinue={goToHome} />;
+      default:
+        return <HomeScreen />;
+    }
+  };
+
+  // Helper to determine if nav should be visible
+  const showNavBar = ['home', 'moodHistory', 'resources'].includes(view);
+
+  return (
+    <>
+      <style>{`
+        :root { --primary-color: #5b6cd0; --secondary-color: #f7a659; --background-light: #f4f7fc; --card-bg: #ffffff; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--background-light); min-height: 100vh; margin: 0; }
+        .container-mobile { max-width: 420px; width: 100%; height: 100vh; background: #fff; margin: 0 auto; display: flex; flex-direction: column; position: relative; box-shadow: 0 0 20px rgba(0,0,0,0.1); overflow: hidden; }
+        .content-scrollable { flex: 1; overflow-y: auto; padding: 24px; padding-bottom: 80px; }
+        .btn-primary { background-color: var(--primary-color); transition: transform 0.1s ease; }
+        .btn-primary:hover { background-color: #4a5ccb; transform: translateY(-1px); }
+        .btn-primary:disabled { background-color: #a5b4fc; opacity: 0.7; cursor: not-allowed; }
+        .radio-card { border: 2px solid #e5e7eb; transition: all 0.2s; cursor: pointer; }
+        .radio-card:hover { border-color: var(--primary-color); box-shadow: 0 4px 10px rgba(91, 108, 208, 0.1); }
+        .radio-card-selected { border-color: var(--primary-color); background-color: var(--primary-color); color: white; box-shadow: 0 4px 10px rgba(91, 108, 208, 0.2); }
+        .radio-card-selected .text-gray-700 { color: white; }
+        .loading-spinner { border-top-color: var(--primary-color); animation: spin 1s infinite linear; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .animate-slide-in { animation: slideIn 0.3s ease-out forwards; }
+        .home-card { border: 1px solid #e5e7eb; transition: all 0.2s; cursor: pointer; }
+        .home-card:hover { border-color: var(--primary-color); transform: translateY(-2px); box-shadow: 0 6px 15px rgba(91, 108, 208, 0.1); }
+        .nav-bar { border-top: 1px solid #e5e7eb; background: white; padding: 10px 0; position: absolute; bottom: 0; width: 100%; display: flex; justify-content: space-around; align-items: center; z-index: 10; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; color: #9CA3AF; font-size: 12px; cursor: pointer; background: none; border: none; }
+        .nav-item.active { color: var(--primary-color); font-weight: 600; }
+        .resource-card { border-left: 4px solid var(--primary-color); background: #f9fafb; padding: 16px; margin-bottom: 12px; border-radius: 0 8px 8px 0; }
+      `}</style>
+      
+      <div className="container-mobile">
+        {/* Side Menu Overlay */}
+        <SideMenu isOpen={isMenuOpen} onClose={toggleMenu} onNavigate={handleMenuAction} />
+
+        {/* Header */}
+        <div className="p-6 pb-0">
+             <Header 
+                title={view === 'home' ? APP_NAME : view === 'moodHistory' ? 'History' : view === 'resources' ? 'Resources' : APP_NAME} 
+                onMenuClick={toggleMenu}
+                showMenuButton={showNavBar} // Only show menu on main tabs
+             />
+        </div>
+
+        {/* Scrollable Content Area */}
+        <div className="content-scrollable">
+             {renderContent()}
+        </div>
+
+        {/* Bottom Navigation Bar */}
+        {showNavBar && (
+            <div className="nav-bar">
+                <button className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={() => navigateToTab('home')}>
+                    <Home size={24} />
+                    <span>Home</span>
+                </button>
+                <button className={`nav-item ${view === 'moodHistory' ? 'active' : ''}`} onClick={() => navigateToTab('moodHistory')}>
+                    <History size={24} />
+                    <span>History</span>
+                </button>
+                <button className={`nav-item ${view === 'resources' ? 'active' : ''}`} onClick={() => navigateToTab('resources')}>
+                    <BookOpen size={24} />
+                    <span>Resources</span>
+                </button>
+            </div>
+        )}
+      </div>
+
+      <CustomModal
+        visible={modal.visible}
+        title={modal.title}
+        message={modal.message}
+        onClose={() => setModal({ visible: false, title: '', message: '' })}
+      />
+    </>
+  );
+};
+
+// --- Components ---
+
+const Header = ({ title, onMenuClick, showMenuButton }) => (
+  <header className="flex items-center justify-between mb-2 relative">
+    {showMenuButton ? (
+        <button onClick={onMenuClick} className="p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-600">
+            <Menu size={24} />
+        </button>
+    ) : <div className="w-10"></div>}
+    
+    <div className="text-center flex-1 pr-10">
+        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+        {title === APP_NAME && <p className="text-xs text-gray-500">Your Path to Wellness</p>}
+    </div>
+    
+    {/* Spacer for alignment */}
+    <div className="w-2"></div>
+  </header>
+);
+
+const SideMenu = ({ isOpen, onClose, onNavigate }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="absolute inset-0 z-50 flex">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onClick={onClose}></div>
+      
+      {/* Drawer */}
+      <div className="relative bg-white w-64 h-full shadow-2xl flex flex-col animate-slide-in z-50">
+        <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-indigo-50">
+          <h2 className="font-bold text-lg text-indigo-600">Menu</h2>
+          <button onClick={onClose} className="p-1 hover:bg-indigo-100 rounded-full"><X size={20} className="text-indigo-400" /></button>
+        </div>
+        <div className="p-3 space-y-1 mt-2">
+          <MenuItem icon={<User size={20} />} text="Profile" onClick={() => onNavigate('profile')} />
+          <MenuItem icon={<Settings size={20} />} text="Settings" onClick={() => onNavigate('settings')} />
+          <div className="h-px bg-gray-100 my-2"></div>
+          <MenuItem icon={<LogOut size={20} />} text="Reset App" onClick={() => onNavigate('reset')} isDestructive />
+        </div>
+        <div className="mt-auto p-5 border-t border-gray-100 bg-gray-50">
+          <p className="text-xs text-gray-400 font-medium">MindConnect v1.0.2</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MenuItem = ({ icon, text, onClick, isDestructive }) => (
+    <button onClick={onClick} className={`flex items-center space-x-3 w-full p-3 rounded-lg transition-colors ${isDestructive ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-indigo-50'}`}>
+        {icon}
+        <span className="font-medium text-sm">{text}</span>
+    </button>
+);
+
+const HomeScreen = ({ onStartAssessment, onStartMoodCheckin }) => {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  return (
+    <div className="animate-fade-in">
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-800">{greeting}!</h2>
+        <p className="text-gray-500 text-sm">Track your mood or take a wellness check.</p>
+      </div>
+      
+      <div className="space-y-4">
+        <HomeCard
+          title="Daily Mood Check-in"
+          description="A quick 3-minute mood log."
+          onClick={onStartMoodCheckin}
+          icon="😊"
+        />
+        <HomeCard
+          title="Wellness Assessment"
+          description="Full 10-question check-up."
+          onClick={onStartAssessment}
+          icon="🧠"
+        />
+      </div>
+    </div>
+  );
+};
+
+// --- NEW --- Resources Screen
+const ResourcesScreen = () => (
+    <div className="animate-fade-in">
+        <p className="text-gray-500 mb-4 text-sm">Helpful tips and contacts for your journey.</p>
+        
+        <div className="resource-card">
+            <h3 className="font-bold text-gray-800">Crisis Helplines</h3>
+            <p className="text-sm text-gray-600 mt-1">National Suicide Prevention Lifeline: <span className="text-blue-600">988</span></p>
+            <p className="text-sm text-gray-600">Crisis Text Line: Text HOME to <span className="text-blue-600">741741</span></p>
+        </div>
+
+        <div className="resource-card">
+            <h3 className="font-bold text-gray-800">Grounding Technique (5-4-3-2-1)</h3>
+            <p className="text-sm text-gray-600 mt-1">Acknowledge 5 things you see, 4 you can touch, 3 you hear, 2 you can smell, and 1 you can taste.</p>
+        </div>
+
+        <div className="resource-card">
+            <h3 className="font-bold text-gray-800">Sleep Hygiene</h3>
+            <p className="text-sm text-gray-600 mt-1">Avoid screens 1 hour before bed. Keep your room cool and dark. Try to wake up at the same time daily.</p>
+        </div>
+    </div>
+);
+
+const HomeCard = ({ title, description, onClick, icon }) => (
+  <button onClick={onClick} className="home-card w-full bg-white p-4 rounded-xl shadow-sm text-left flex items-center space-x-4">
+    <div className="text-2xl bg-indigo-50 p-3 rounded-lg text-indigo-600">{icon}</div>
+    <div>
+      <h3 className="text-md font-bold text-gray-800">{title}</h3>
+      <p className="text-xs text-gray-500">{description}</p>
+    </div>
+  </button>
+);
+
+// ... (Other screens like AgeSelect, Quiz, Results remain largely similar but wrapped in divs) ...
+
+const AgeSelectScreen = ({ onStartQuiz, onBack }) => {
+  const [selectedAgeGroup, setSelectedAgeGroup] = useState(null);
+  const ageGroups = [ { label: 'Teen (13-17)', value: 'teen' }, { label: 'Adult (18-64)', value: 'adult' }, { label: 'Elder (65+)', value: 'elder' } ];
+  return (
+    <div>
+        <button onClick={onBack} className="flex items-center text-gray-500 mb-4 text-sm hover:text-gray-700"><ChevronLeft size={16}/> Back</button>
+        <h2 className="text-lg font-semibold mb-4 text-center">Select Age Group</h2>
+        <div className="space-y-3 mb-6">
+            {ageGroups.map(g => <RadioCard key={g.value} text={g.label} onPress={() => setSelectedAgeGroup(g.value)} selected={selectedAgeGroup === g.value} />)}
+        </div>
+        <Button title="Start Assessment" onClick={() => onStartQuiz(selectedAgeGroup)} disabled={!selectedAgeGroup} />
+    </div>
+  );
+};
+
+const QuizScreen = ({ question, qIndex, totalQ, onSubmit, selectedAnswer, setSelectedAnswer, title }) => {
+  const progress = ((qIndex + 1) / totalQ) * 100;
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-2 text-gray-800">{title}</h2>
+      <div className="w-full bg-gray-200 rounded-full h-2 mb-6"><div className="h-2 rounded-full bg-indigo-500 transition-all duration-300" style={{ width: `${progress}%` }}></div></div>
+      <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+        <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide font-bold">Question {qIndex + 1} / {totalQ}</p>
+        <h3 className="text-lg font-bold text-gray-800 mb-6 leading-snug">{question.q}</h3>
+        <div className="space-y-3">
+            {question.options.map(opt => <RadioCard key={opt.text} text={opt.text} onPress={() => setSelectedAnswer(opt.score)} selected={selectedAnswer === opt.score} />)}
+        </div>
+      </div>
+      <Button title={qIndex < totalQ - 1 ? 'Next' : 'Finish'} onClick={() => onSubmit(selectedAnswer)} disabled={selectedAnswer === null} />
+    </div>
+  );
+};
+
+const ResultsScreen = ({ result, score, maxScore, ageGroup, onShare, onRestart, onOpenLink }) => {
+  const scoreColor = score < maxScore * 0.3 ? 'text-green-600' : score <= maxScore * 0.6 ? 'text-yellow-600' : 'text-red-600';
+  return (
+    <div className="animate-fade-in pb-6">
+        <div className="bg-indigo-50 p-4 rounded-xl mb-6 text-center">
+            <p className="text-xs font-bold text-indigo-400 uppercase">Your Score</p>
+            <p className={`text-3xl font-extrabold ${scoreColor} my-1`}>{score} / {maxScore}</p>
+            <p className="text-xs text-gray-500">Based on {ageGroup} profile</p>
+        </div>
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-4">
+            <h3 className="font-bold text-gray-800 mb-2">Recommended Group</h3>
+            <div className="bg-indigo-600 text-white p-3 rounded-lg font-bold text-center shadow-md">{result.group}</div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mt-6">
+            <Button title="Share" onClick={onShare} />
+            <Button title="Home" onClick={onRestart} secondary />
+        </div>
+    </div>
+  );
+};
+
+const MoodResultScreen = ({ mood, color, onContinue }) => (
+    <div className="text-center py-10">
+      <div className="text-6xl mb-4 animate-bounce">{mood === "Positive" ? "😊" : mood === "Neutral" ? "🙂" : "😕"}</div>
+      <h2 className="text-2xl font-bold text-gray-800 mb-1">Logged!</h2>
+      <p className={`text-xl font-bold ${color} mb-8`}>{mood}</p>
+      <Button title="Done" onClick={onContinue} />
+    </div>
+);
+
+const MoodHistoryScreen = ({ history, loading, getMoodColor }) => {
+  const formatDate = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return (
+    <div>
+      {loading && <LoadingScreen text="Loading history..." />}
+      {!loading && history.length === 0 && <div className="text-center py-10 text-gray-400">No history yet.</div>}
+      {!loading && history.length > 0 && (
+        <div className="space-y-3">
+          {history.map(item => (
+            <div key={item.id} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+              <div><p className={`font-bold ${getMoodColor(item.mood)}`}>{item.mood}</p><p className="text-xs text-gray-400">{formatDate(item.timestamp)}</p></div>
+              <div className="text-sm font-bold text-gray-300">{item.score} pts</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LoadingScreen = ({ text }) => (
+    <div className="text-center py-20">
+        <div className="loading-spinner w-8 h-8 border-4 border-gray-200 rounded-full mx-auto mb-4"></div>
+        <p className="text-sm font-semibold text-gray-500">{text}</p>
+    </div>
+);
+
+// --- UI Components ---
+const RadioCard = ({ text, onPress, selected }) => (
+  <div onClick={onPress} className={`radio-card p-3 rounded-xl flex items-center justify-between ${selected ? 'radio-card-selected' : 'bg-white'}`}>
+    <span className="text-sm font-medium text-gray-700">{text}</span>
+    {selected && <div className="w-4 h-4 bg-white rounded-full"></div>}
+  </div>
+);
+
+const Button = ({ title, onClick, disabled, secondary }) => (
+  <button onClick={onClick} disabled={disabled} className={`w-full py-3 font-semibold rounded-xl text-sm ${secondary ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'btn-primary text-white'} ${disabled ? 'opacity-50' : ''}`}>
+    {title}
+  </button>
+);
+
+const CustomModal = ({ visible, title, message, onClose }) => {
+    if (!visible) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl p-6 max-w-xs w-full text-center shadow-2xl">
+                <h3 className={`font-bold text-lg mb-2 ${title.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{title}</h3>
+                <p className="text-sm text-gray-600 mb-4">{message}</p>
+                <button onClick={onClose} className="w-full bg-gray-100 py-2 rounded-lg font-bold text-sm">Close</button>
+            </div>
+        </div>
+    );
+};
+
+export default App;
